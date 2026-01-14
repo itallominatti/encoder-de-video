@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoder/application/repositories"
 	"encoder/domain"
+	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -21,8 +23,13 @@ func NewVideoService() VideoService {
 	return VideoService{}
 }
 
-func (v *VideoService) Download(bucketName string) error {
+func (v *VideoService) Download() error {
 	ctx := context.Background()
+
+	bucketName := os.Getenv("AWS_STORAGE_BUCKET_NAME")
+	if bucketName == "" {
+		return fmt.Errorf("AWS_STORAGE_BUCKET_NAME not set")
+	}
 
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -55,5 +62,25 @@ func (v *VideoService) Download(bucketName string) error {
 	}
 
 	log.Printf("video %v has been stored", v.Video.ID)
+	return nil
+}
+
+func (v *VideoService) Fragment() error {
+
+	err := os.Mkdir(os.Getenv("localStoragePath"+"/"+v.Video.ID), os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	source := os.Getenv("localStoragePath") + "/" + v.Video.ID + ".mp4"
+	target := os.Getenv("localStoragePath") + "/" + v.Video.ID + "/frag"
+
+	cmd := exec.Command("mp4fragment", source, target)
+	err = cmd.Run()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error fragmenting video: %v, output: %s", err, string(output))
+	}
+	log.Printf("video %v has been fragmented", v.Video.ID)
 	return nil
 }
